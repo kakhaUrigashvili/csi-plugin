@@ -1,0 +1,57 @@
+---
+# The controller plugin runs as a single StatefulSet replica.
+# It is paired with the external-provisioner sidecar, which watches for
+# unbound PVCs and calls our CreateVolume / DeleteVolume RPCs.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: demo-csi-controller
+  namespace: kube-system
+spec:
+  serviceName: demo-csi-controller
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-csi-controller
+  template:
+    metadata:
+      labels:
+        app: demo-csi-controller
+    spec:
+      serviceAccountName: demo-csi-controller
+      containers:
+        # ── Our CSI driver ───────────────────────────────────────────────────
+        - name: demo-csi-plugin
+          image: demo-csi-plugin:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - --endpoint=unix:///csi/csi.sock
+            - --state-dir=/var/lib/demo-csi/volumes
+          volumeMounts:
+            # Socket directory shared with the external-provisioner sidecar.
+            - name: socket-dir
+              mountPath: /csi
+            # Host directory where volume subdirectories are created.
+            - name: volumes-dir
+              mountPath: /var/lib/demo-csi/volumes
+          securityContext:
+            privileged: true
+
+        # ── external-provisioner sidecar ─────────────────────────────────────
+        # Watches for PVCs and calls CreateVolume / DeleteVolume on our driver.
+        - name: external-provisioner
+          image: registry.k8s.io/sig-storage/csi-provisioner:v4.0.0
+          args:
+            - --csi-address=/csi/csi.sock
+            - --v=5
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+
+      volumes:
+        - name: socket-dir
+          emptyDir: {}
+        - name: volumes-dir
+          hostPath:
+            path: /var/lib/demo-csi/volumes
+            type: DirectoryOrCreate

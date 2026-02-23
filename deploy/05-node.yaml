@@ -1,0 +1,79 @@
+---
+# The node plugin runs on every node as a DaemonSet.
+# It is paired with the node-driver-registrar sidecar, which registers the
+# driver with the kubelet on that node via a Unix socket.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: demo-csi-node
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: demo-csi-node
+  template:
+    metadata:
+      labels:
+        app: demo-csi-node
+    spec:
+      hostNetwork: true
+      containers:
+        # ── Our CSI driver ───────────────────────────────────────────────────
+        - name: demo-csi-plugin
+          image: demo-csi-plugin:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - --endpoint=unix:///csi/csi.sock
+            - --state-dir=/var/lib/demo-csi/volumes
+          volumeMounts:
+            # Socket directory shared with node-driver-registrar.
+            - name: socket-dir
+              mountPath: /csi
+            # The driver needs access to the host kubelet directory so that
+            # bind mounts it creates are visible to kubelet.
+            - name: kubelet-dir
+              mountPath: /var/lib/kubelet
+              mountPropagation: Bidirectional
+            # Where volumes are stored on the host.
+            - name: volumes-dir
+              mountPath: /var/lib/demo-csi/volumes
+          securityContext:
+            privileged: true
+
+        # ── node-driver-registrar sidecar ────────────────────────────────────
+        # Registers our driver socket with the kubelet's plugin directory.
+        - name: node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.0
+          args:
+            - --csi-address=/csi/csi.sock
+            - --kubelet-registration-path=/var/lib/kubelet/plugins/demo.csi.example.com/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+            # Needed so the registrar can create the registration socket under
+            # /var/lib/kubelet/plugins_registry/
+            - name: registration-dir
+              mountPath: /registration
+
+      volumes:
+        # Shared socket between the driver and the registrar.
+        - name: socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/demo.csi.example.com
+            type: DirectoryOrCreate
+        # Host kubelet directory — must be bidirectional so that bind mounts
+        # made by our driver propagate back to kubelet.
+        - name: kubelet-dir
+          hostPath:
+            path: /var/lib/kubelet
+            type: Directory
+        # Kubelet plugin registration directory.
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry
+            type: Directory
+        # Volume storage on the host.
+        - name: volumes-dir
+          hostPath:
+            path: /var/lib/demo-csi/volumes
+            type: DirectoryOrCreate

@@ -1,0 +1,12 @@
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: demo-csi
+provisioner: demo.csi.example.com
+# Immediate binding: the PV is created as soon as the PVC is submitted.
+# WaitForFirstConsumer would wait until a pod is scheduled, which requires
+# topology information — unnecessary complexity for a demo.
+volumeBindingMode: Immediate
+# Allow volumes to be deleted when the PVC is deleted.
+reclaimPolicy: Delete

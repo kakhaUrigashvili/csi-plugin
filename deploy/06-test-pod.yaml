@@ -1,0 +1,47 @@
+---
+# PersistentVolumeClaim — requests 1 Gi from our demo StorageClass.
+# The external-provisioner will call CreateVolume on our driver and bind this
+# claim to the resulting PersistentVolume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: demo-csi-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: demo-csi
+
+---
+# A simple Pod that mounts the PVC and writes a file into it.
+# Use this to verify the end-to-end flow:
+#
+#   kubectl apply -f deploy/06-test-pod.yaml
+#   kubectl wait --for=condition=Ready pod/demo-csi-test-pod --timeout=60s
+#   kubectl exec demo-csi-test-pod -- cat /data/hello.txt
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-csi-test-pod
+spec:
+  containers:
+    - name: writer
+      image: busybox:latest
+      command:
+        - sh
+        - -c
+        - |
+          echo "Hello from demo CSI driver! $(date)" > /data/hello.txt
+          echo "Volume contents:"
+          ls -la /data/
+          echo "Sleeping so you can exec into the pod..."
+          sleep 3600
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: demo-csi-pvc

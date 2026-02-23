@@ -1,0 +1,15 @@
+---
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: demo.csi.example.com
+spec:
+  # attachRequired: false means Kubernetes won't call ControllerPublishVolume /
+  # ControllerUnpublishVolume — our simple driver doesn't implement them.
+  attachRequired: false
+  # podInfoOnMount: false — we don't need pod metadata injected into mount calls.
+  podInfoOnMount: false
+  # volumeLifecycleModes: Persistent is the default; volumes exist independently
+  # of any particular pod.
+  volumeLifecycleModes:
+    - Persistent
